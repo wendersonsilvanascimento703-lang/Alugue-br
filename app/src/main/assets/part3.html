@@ -1,0 +1,39 @@
+async function refresh(){if(!s.session)return null;var exp=Number(s.session.expires_at||0)*1000;if(exp&&exp-Date.now()>90000)return s.session;if(!s.session.refresh_token){save(null);return null}var r=await api('/auth/v1/token?grant_type=refresh_token',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:s.session.refresh_token})});if(!r.ok){save(null);return null}var d=await r.json();save(d);return d}
+function view(id){['home','details','auth','create'].forEach(function(x){E(x).classList.add('hidden')});E(id).classList.remove('hidden');window.scrollTo(0,0)}
+function sessionUI(){E('account').textContent=s.session&&s.session.user?'Minha conta':'Entrar';E('footer').textContent=s.session&&s.session.user?'Conectado como '+(s.session.user.email||'usuário'):'Entre apenas quando quiser anunciar.'}
+
+async function listings(){
+ E('status').classList.remove('hidden');E('status').textContent='Carregando imóveis...';E('grid').innerHTML='';
+ try{
+  var rs=await Promise.all([
+   api('/rest/v1/listings?select=id,title,contact_name,state,city,neighborhood,rent_amount,notes,whatsapp,created_at&status=eq.active&order=created_at.desc'),
+   api('/rest/v1/listing_photos?select=listing_id,storage_path,position&order=position.asc')
+  ]);
+  if(!rs[0].ok)throw new Error('Não foi possível carregar os imóveis.');
+  var a=await rs[0].json(),p=rs[1].ok?await rs[1].json():[],m={};
+  p.forEach(function(x){(m[x.listing_id]||(m[x.listing_id]=[])).push({public_url:photoUrl(x.storage_path),position:x.position})});
+  s.listings=a.map(function(x){x.photos=m[x.id]||[];return x});filter()
+ }catch(e){E('status').textContent=e.message||'Erro ao carregar.'}
+}
+
+function filter(){
+ var q=norm(E('q').value),c=norm(E('city').value),n=norm(E('neigh').value),mn=Number(E('min').value||0),mx=Number(E('max').value||0),has=q||c||n||mn||mx;
+ s.filtered=s.listings.filter(function(x){var z=norm(x.title+' '+x.city+' '+x.neighborhood+' '+x.state),r=Number(x.rent_amount);return(!q||z.indexOf(q)>=0)&&(!c||norm(x.city).indexOf(c)>=0)&&(!n||norm(x.neighborhood).indexOf(n)>=0)&&(!mn||r>=mn)&&(!mx||r<=mx)});
+ E('clear').classList.toggle('hidden',!has);E('count').textContent=s.filtered.length;E('summary').textContent=has?s.filtered.length+' de '+s.listings.length+' encontrados':'';renderListings()
+}
+
+function renderListings(){
+ var g=E('grid');g.innerHTML='';E('status').classList.add('hidden');
+ if(!s.filtered.length){E('status').classList.remove('hidden');E('status').textContent=s.listings.length?'Nenhum imóvel encontrado.':'Ainda não há imóveis publicados.';return}
+ s.filtered.forEach(function(x){
+  var b=document.createElement('button');b.className='listing';var cov=x.photos[0]&&x.photos[0].public_url;
+  b.innerHTML=(cov?'<img class="cover" src="'+esc(cov)+'" alt="Foto do imóvel">':'<div class="cover empty">Sem foto</div>')+
+  '<div class="body"><p class="loc">'+esc(x.neighborhood)+' · '+esc(x.city)+'/'+esc(x.state)+'</p><div class="title">'+esc(x.title)+'</div><div class="foot"><span class="price">'+money(x.rent_amount)+'</span><span class="link">Ver detalhes ›</span></div></div>';
+  b.onclick=function(){openDetails(x.id)};g.appendChild(b)
+ })
+}
+
+function openDetails(id){
+ var x=s.listings.find(function(y){return y.id===id});if(!x)return;
+ var gal=x.photos.length?'<div class="gallery">'+x.photos.map(function(p){return '<div class="pic"><img src="'+esc(p.public_url)+'" alt="Foto do imóvel"></div>'}).join('')+'</div>':'<div class="pic empty">Sem foto</div>';
+ E('details').innerHTML='<div class="viewhead"><button id="backD" class="back">‹ Voltar</button><span class="brand">AlugueBR</span></div>'+gal+
