@@ -1,0 +1,38 @@
+ '<article class="details"><p class="loc">'+esc(x.neighborhood)+' · '+esc(x.city)+'/'+esc(x.state)+'</p><h1>'+esc(x.title)+'</h1><div class="big">'+money(x.rent_amount)+'</div><p class="muted">por mês</p><div class="divider"></div><b>Sobre o imóvel</b><p>'+esc(x.notes||'O anunciante ainda não adicionou uma descrição.')+'</p><div class="divider"></div><b>Contato</b><p>'+esc(x.contact_name)+'</p></article><button id="w" class="btn">Chamar no WhatsApp</button>';
+ E('backD').onclick=function(){view('home')};E('w').onclick=function(){location.href='https://wa.me/'+wa(x.whatsapp)+'?text='+encodeURIComponent('Olá! Vi o anúncio “'+x.title+'” no AlugueBR e gostaria de saber mais.')};view('details')
+}
+
+function auth(){
+ var v=E('auth');
+ if(s.session&&s.session.user){
+  v.innerHTML='<div class="viewhead"><button id="backA" class="back">‹ Voltar</button><span class="brand">AlugueBR</span></div><div class="panel"><h1>Minha conta</h1><p class="muted">'+esc(s.session.user.email||'')+'</p><button id="out" class="btn danger">Sair da conta</button></div>';
+  E('backA').onclick=function(){view('home')};E('out').onclick=logout;view('auth');return
+ }
+ v.innerHTML='<div class="viewhead"><button id="backA" class="back">‹ Voltar</button><span class="brand">AlugueBR</span></div><div class="panel"><h1>'+(s.mode==='signin'?'Entrar':'Criar conta')+'</h1><div class="tabs"><button id="ti" class="tab '+(s.mode==='signin'?'on':'')+'">Entrar</button><button id="tu" class="tab '+(s.mode==='signup'?'on':'')+'">Criar conta</button></div>'+(s.mode==='signup'?'<label><span>Nome</span><input id="name" placeholder="Seu nome"></label>':'')+'<label><span>E-mail</span><input id="email" type="email" autocomplete="email"></label><label><span>Senha</span><input id="pass" type="password" minlength="6"></label><button id="authGo" class="btn">'+(s.mode==='signin'?'Entrar':'Criar conta')+'</button><p id="authMsg" class="msg"></p></div>';
+ E('backA').onclick=function(){view('home')};E('ti').onclick=function(){s.mode='signin';auth()};E('tu').onclick=function(){s.mode='signup';auth()};E('authGo').onclick=authGo;view('auth')
+}
+
+async function authGo(){
+ var e=E('email').value.trim(),p=E('pass').value,m=E('authMsg'),b=E('authGo');
+ if(!e||p.length<6){m.className='msg err';m.textContent='Preencha e-mail e senha com pelo menos 6 caracteres.';return}
+ b.disabled=true;
+ try{
+  if(s.mode==='signin'){
+   var r=await api('/auth/v1/token?grant_type=password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p})}),d=await r.json();
+   if(!r.ok)throw new Error(d.msg||d.error_description||'Não foi possível entrar.');
+   save(d);note('Você entrou no AlugueBR.');view('home')
+  }else{
+   var n=E('name').value.trim();if(!n)throw new Error('Digite seu nome.');
+   var rr=await api('/auth/v1/signup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:e,password:p,data:{full_name:n}})}),dd=await rr.json();
+   if(!rr.ok)throw new Error(dd.msg||dd.error_description||'Não foi possível criar a conta.');
+   if(dd.access_token){save(dd);note('Conta criada.');view('home')}
+   else{m.className='msg ok';m.textContent='Conta criada. Confira seu e-mail para confirmar e depois entre.'}
+  }
+ }catch(x){m.className='msg err';m.textContent=x.message||'Erro.'}finally{b.disabled=false}
+}
+
+async function logout(){try{if(s.session&&s.session.access_token)await api('/auth/v1/logout',{method:'POST'},true)}catch(e){}save(null);note('Você saiu da conta.');view('home')}
+
+function openCreate(){
+ if(!s.session){s.mode='signin';auth();return}
+ s.photos=[];var n=(s.session.user&&s.session.user.user_metadata&&s.session.user.user_metadata.full_name)||'';
