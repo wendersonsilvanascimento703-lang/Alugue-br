@@ -1,0 +1,61 @@
+.footer{text-align:center;color:#829089;font-size:12px;padding:24px 0}.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translateX(-50%);width:min(calc(100% - 36px),680px);background:#1D2521;color:white;border-radius:14px;padding:13px 16px;text-align:center;z-index:9}
+@media(min-width:700px){.grid{grid-template-columns:1fr 1fr}}@media(max-width:520px){.row{grid-template-columns:1fr}.photos{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="app">
+<header class="top"><button id="brand" class="brand">AlugueBR</button><button id="account" class="link">Entrar</button></header>
+
+<main id="home">
+<section class="hero card">
+<small>ALUGUEL SEM COMPLICAÇÃO</small>
+<h1>Encontre seu próximo lar.</h1>
+<p class="muted">Veja imóveis publicados e fale diretamente com o anunciante.</p>
+<button id="announce" class="btn">+ Anunciar imóvel</button>
+</section>
+
+<section class="filters card">
+<div style="display:flex;justify-content:space-between;align-items:center"><b>Buscar imóveis</b><button id="clear" class="link hidden">Limpar</button></div>
+<label><span>Busca</span><input id="q" type="search" placeholder="Imóvel, cidade ou bairro"></label>
+<div class="row">
+<label><span>Cidade</span><input id="city" placeholder="Cidade"></label>
+<label><span>Bairro</span><input id="neigh" placeholder="Bairro"></label>
+</div>
+<div class="row">
+<label><span>Preço mínimo</span><input id="min" type="number" min="0" placeholder="R$ mín."></label>
+<label><span>Preço máximo</span><input id="max" type="number" min="0" placeholder="R$ máx."></label>
+</div>
+</section>
+
+<section>
+<div class="heading"><div><h2>Imóveis publicados</h2><p id="summary" class="muted"></p></div><span id="count" class="pill">0</span></div>
+<div id="status" class="status">Carregando imóveis...</div>
+<div id="grid" class="grid"></div>
+</section>
+</main>
+
+<section id="details" class="hidden"></section>
+<section id="auth" class="hidden"></section>
+<section id="create" class="hidden"></section>
+<footer class="footer" id="footer">Entre apenas quando quiser anunciar.</footer>
+</div>
+<div id="toast" class="toast hidden"></div>
+
+<script>
+(function(){
+var URL_BASE='https://wtfnjaioehdwqoqyzpgz.supabase.co';
+var KEY='sb_publishable__Ye0QCjkEHtyhsUKShJjkw_jwqTsMbZ';
+var BUCKET='listing-photos', SESSION='aluguebr.session.v2', MAX=6;
+var s={session:null,listings:[],filtered:[],mode:'signin',photos:[]};
+
+function E(id){return document.getElementById(id)}
+function esc(v){return String(v||'').replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]})}
+function norm(v){return String(v||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim().toLowerCase()}
+function money(v){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL',maximumFractionDigits:0}).format(Number(v||0))}
+function digits(v){return String(v||'').replace(/\D/g,'')}
+function wa(v){var d=digits(v);return d.indexOf('55')===0?d:'55'+d}
+function photoUrl(p){return URL_BASE+'/storage/v1/object/public/'+BUCKET+'/'+p.split('/').map(encodeURIComponent).join('/')}
+function note(t){var x=E('toast');x.textContent=t;x.classList.remove('hidden');clearTimeout(note.t);note.t=setTimeout(function(){x.classList.add('hidden')},3000)}
+function save(x){s.session=x;try{if(x)localStorage.setItem(SESSION,JSON.stringify(x));else localStorage.removeItem(SESSION)}catch(e){}sessionUI()}
+function loadSession(){try{return JSON.parse(localStorage.getItem(SESSION)||'null')}catch(e){return null}}
+async function api(path,opt,auth){opt=opt||{};var h=new Headers(opt.headers||{});h.set('apikey',KEY);if(auth&&s.session&&s.session.access_token)h.set('Authorization','Bearer '+s.session.access_token);opt.headers=h;return fetch(URL_BASE+path,opt)}
