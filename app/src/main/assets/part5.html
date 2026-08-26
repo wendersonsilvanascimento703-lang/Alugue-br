@@ -1,0 +1,54 @@
+ E('create').innerHTML='<div class="viewhead"><button id="backC" class="back">‹ Voltar</button><span class="brand">AlugueBR</span></div><div class="panel"><h1>Anunciar imóvel</h1><label><span>Título</span><input id="lt" maxlength="90" placeholder="Ex.: Casa para alugar"></label><label><span>Nome para contato</span><input id="cn" maxlength="80" value="'+esc(n)+'"></label><div class="row"><label><span>UF</span><input id="uf" maxlength="2" placeholder="SP"></label><label><span>Cidade</span><input id="lc" maxlength="80"></label></div><label><span>Bairro</span><input id="ln" maxlength="80"></label><label><span>Aluguel mensal</span><input id="rent" type="number" min="1" placeholder="1500"></label><label><span>WhatsApp</span><input id="phone" type="tel" maxlength="20" placeholder="11999999999"></label><label><span>Descrição</span><textarea id="notes" maxlength="1200"></textarea></label><label><span>Fotos — até 6</span><input id="file" type="file" accept="image/*" multiple></label><div id="prev" class="photos"></div><button id="pub" class="btn">Publicar anúncio</button><p id="pubMsg" class="msg"></p></div>';
+ E('backC').onclick=function(){view('home')};E('file').onchange=pick;E('pub').onclick=publish;view('create')
+}
+
+function pick(ev){
+ var fs=Array.from(ev.target.files||[]).slice(0,MAX-s.photos.length);
+ fs.forEach(function(f){s.photos.push({file:f,url:URL.createObjectURL(f)})});ev.target.value='';
+ E('prev').innerHTML=s.photos.map(function(x){return '<img src="'+x.url+'" alt="Prévia">'}).join('')
+}
+
+async function prepareImage(file){
+ var allowed=['image/jpeg','image/png','image/webp'];
+ if(allowed.indexOf(file.type)<0)throw new Error('Use fotos JPG, PNG ou WebP.');
+ if(file.size>10*1024*1024)throw new Error('Cada foto deve ter no máximo 10 MB.');
+ return file;
+}
+
+async function publish(){
+ var m=E('pubMsg'),b=E('pub'),title=E('lt').value.trim(),cn=E('cn').value.trim(),uf=E('uf').value.trim().toUpperCase(),city=E('lc').value.trim(),nei=E('ln').value.trim(),rent=Number(E('rent').value),phone=digits(E('phone').value),notes=E('notes').value.trim();
+ if(!title||!cn||uf.length!==2||!city||!nei||!rent){m.className='msg err';m.textContent='Confira título, contato, UF, cidade, bairro e aluguel.';return}
+ if(phone.length<10||phone.length>13){m.className='msg err';m.textContent='Digite um WhatsApp válido com DDD.';return}
+ if(!s.photos.length){m.className='msg err';m.textContent='Adicione pelo menos uma foto.';return}
+ var ses=await refresh();if(!ses){note('Sua sessão expirou.');auth();return}
+ b.disabled=true;b.textContent='Publicando...';var id=null;
+ try{
+  var r=await api('/rest/v1/listings?select=id',{method:'POST',headers:{'Content-Type':'application/json','Prefer':'return=representation'},body:JSON.stringify({owner_id:ses.user.id,contact_name:cn,title:title,state:uf,city:city,neighborhood:nei,rent_amount:rent,notes:notes,whatsapp:phone,status:'active'})},true),d=await r.json();
+  if(!r.ok)throw new Error(d.message||'Não foi possível criar o anúncio.');id=d[0]&&d[0].id;if(!id)throw new Error('Anúncio criado sem identificador.');
+  for(var i=0;i<s.photos.length;i++){
+   m.textContent='Enviando foto '+(i+1)+' de '+s.photos.length+'...';
+   var blob=await prepareImage(s.photos[i].file),ext=(s.photos[i].file.type||'image/jpeg').split('/')[1]||'jpg',path=ses.user.id+'/'+id+'/'+Date.now()+'-'+i+'.'+ext,ep=path.split('/').map(encodeURIComponent).join('/');
+   var u=await api('/storage/v1/object/'+BUCKET+'/'+ep,{method:'POST',headers:{'Content-Type':s.photos[i].file.type||'image/jpeg','x-upsert':'false'},body:blob},true);
+   if(!u.ok)throw new Error('Falha ao enviar a foto '+(i+1)+'.');
+   var pr=await api('/rest/v1/listing_photos',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({listing_id:id,storage_path:path,position:i})},true);
+   if(!pr.ok)throw new Error('Foto enviada, mas não vinculada ao anúncio.')
+  }
+  s.photos.forEach(function(x){URL.revokeObjectURL(x.url)});s.photos=[];note('Anúncio publicado com sucesso!');view('home');await listings()
+ }catch(x){
+  if(id){try{await api('/rest/v1/listings?id=eq.'+encodeURIComponent(id),{method:'DELETE'},true)}catch(e){}}
+  m.className='msg err';m.textContent=x.message||'Não foi possível publicar.'
+ }finally{b.disabled=false;b.textContent='Publicar anúncio'}
+}
+
+E('brand').onclick=function(){view('home')};
+E('account').onclick=auth;
+E('announce').onclick=openCreate;
+E('clear').onclick=function(){['q','city','neigh','min','max'].forEach(function(id){E(id).value=''});filter()};
+['q','city','neigh','min','max'].forEach(function(id){E(id).oninput=filter});
+
+s.session=loadSession();
+refresh().catch(function(){}).then(function(){sessionUI();view('home');listings()});
+})();
+</script>
+</body>
+</html>
