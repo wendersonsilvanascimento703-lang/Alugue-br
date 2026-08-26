@@ -82,7 +82,7 @@ public class MainActivity extends Activity {
             }
         });
 
-        String html = readAsset("index.html");
+        String html = readAsset("part1.html") + readAsset("part2.html") + readAsset("part3.html") + readAsset("part4.html") + readAsset("part5.html");
         webView.loadDataWithBaseURL(APP_ORIGIN, html, "text/html", "UTF-8", null);
     }
 
